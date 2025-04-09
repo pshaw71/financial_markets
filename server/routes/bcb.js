@@ -5,13 +5,17 @@ const CDIModel = require('../models/cdi');
 const SelicModel = require('../models/selic');
 const USD_PtaxModel = require('../models/usd-ptax');
 const EUR_PtaxModel = require('../models/eur-ptax');
+const TR1Model = require('../models/tr1');
+const PoupancaNovaModel = require('../models/poupanca-nova');
 const BCB_SERIES = require('../config/dataseries-codes');
 
 const controllers = {
   cdi: createController(CDIModel, 'CDI'),
   selic: createController(SelicModel, 'SELIC'),
   usd_ptax: createController(USD_PtaxModel, 'USD_PTAX'),
-  eur_ptax: createController(EUR_PtaxModel, 'EUR_PTAX')
+  eur_ptax: createController(EUR_PtaxModel, 'EUR_PTAX'),
+  tr1: createController(TR1Model, 'TR1'),
+  poupanca_nova: createController(PoupancaNovaModel, 'POUPANCA_NOVA')
   // Add other series controllers here
 };
 
@@ -43,12 +47,6 @@ router.route('/:series/records/:id').patch((req, res) => {
   if (!controller) return res.status(404).json({ error: 'Series not found' });
   controller.updateRecord(req, res);
 });
-
-// router.route('/:series/records/:id').delete((req, res) => {
-//   const controller = controllers[req.params.series];
-//   if (!controller) return res.status(404).json({ error: 'Series not found' });
-//   controller.deleteRecord(req, res);
-// });
 
 router.route('/:series/most-recent-date').get((req, res) => {
   const controller = controllers[req.params.series];

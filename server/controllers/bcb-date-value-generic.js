@@ -9,12 +9,14 @@ const {
 
 // Factory function to create controllers for BCB date-value data
 const createBcbDateValueController = (Model, seriesKey) => {
-  const sgsCode = BCB_SERIES[seriesKey];
+  const seriesConfig = BCB_SERIES[seriesKey];
+  const sgsCode = seriesConfig?.sgsCode;
+  const seriesStartDate = seriesConfig?.startDate;
   console.log(seriesKey);
   console.log("SGS Code:", sgsCode);
 
-  if (!sgsCode) {
-    throw new Error(`Invalid BCB series key: ${seriesKey}`);
+  if (!sgsCode || !seriesStartDate) {
+    throw new Error(`Invalid BCB series key or missing configuration: ${seriesKey}`);
   }
 
   return {
@@ -27,7 +29,7 @@ const createBcbDateValueController = (Model, seriesKey) => {
         console.log(Object.keys(req.query).length);
 
         const { startDate: normalizedStart, endDate: normalizedEnd } =
-          await normalizeDates(Model, startDate, endDate, "30/06/1994");
+          await normalizeDates(Model, startDate, endDate, seriesStartDate);
         console.log("Start Date:", normalizedStart);
         console.log("End Date:", normalizedEnd);
 
@@ -42,14 +44,22 @@ const createBcbDateValueController = (Model, seriesKey) => {
         const data = await response.json();
         const treatedData = treatBcbData(data);
 
+        // Get existing dates from MongoDB
+        const datesToInsert = treatedData.map(item => item.date);
+        const existingRecords = await Model.find({ date: { $in: datesToInsert } });
+        const existingDates = new Set(existingRecords.map(record => record.date.toISOString()));
+
+        // Filter out records with existing dates
+        const newRecords = treatedData.filter(item => !existingDates.has(item.date.toISOString()));
+        console.log('New Records to Insert:', newRecords);
+
+        if (newRecords.length === 0) {
+          return res.status(200).json({ message: 'No new data to store', data: [] });
+        }
+
         // Save to MongoDB
-        await Model.insertMany(treatedData, { ordered: true });
-        res
-          .status(200)
-          .json({
-            message: "Data fetched and stored successfully",
-            data: treatedData,
-          });
+        await Model.insertMany(newRecords, { ordered: false });
+        res.status(200).json({ message: `Stored ${newRecords.length} new ${seriesKey} records`, data: newRecords });
       } catch (error) {
         console.error("Error fetching BCB data:", error);
         res
