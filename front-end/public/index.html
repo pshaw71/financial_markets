@@ -24,63 +24,66 @@
       th,
       td {
         border: 1px solid #ddd;
-        padding: 2px;
+        padding: 8px;
         text-align: left;
       }
       th {
         background-color: #f2f2f2;
       }
       .date-inputs {
-        margin-top: 5px;
+        margin-top: 10px;
         display: flex;
         flex-direction: column;
         align-items: center;
       }
       .date-inputs label {
-        margin-right: 5px;
+        margin-right: 10px;
       }
       .date-inputs div {
         display: flex;
         align-items: center;
-        margin: 2px 0;
+        margin: 5px 0;
+      }
+      hr {
+        width: 50%;
+        margin: 15px auto;
+        border: 1px solid #ddd;
       }
     </style>
   </head>
   <body>
-    <h1 style="text-align: center">BCB Data Manager</h1>
+    <h1 style="text-align: center">Data Manager</h1>
     <div class="container">
       <label for="series-select">Select Series: </label>
       <select id="series-select" onchange="changeSeries(this.value)">
         <option value="">Select a series</option>
       </select>
       <button onclick="fetchAndStoreData()">Fetch Data</button>
+      <button onclick="loadRecords()">Load Records</button>
       <p>Most Recent Date: <span id="most-recent-date">N/A</span></p>
       <hr />
       <div class="date-inputs">
         <div>
-          <label for="start-date">Start Date (dd/mm/yyyy): </label>
+          <label for="start-date">Start Date: </label>
           <input type="date" id="start-date" />
         </div>
         <div>
-          <label for="end-date">End Date (dd/mm/yyyy): </label>
+          <label for="end-date">End Date: </label>
           <input type="date" id="end-date" />
         </div>
         <button onclick="loadRecords()">Load Records with Filters</button>
       </div>
     </div>
     <table id="records-table">
-      <thead>
-        <tr>
-          <th>Date</th>
-          <th>Value</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
+      <thead id="table-head"></thead>
       <tbody id="records-body"></tbody>
     </table>
 
     <script>
       let currentSeries = "cdi"; // Default series
+      let currentSchemaType = "date_value"; // Default schema type
+      let seriesSchemas = {};
+      let seriesList = [];
 
       // Helper to format Date to dd/mm/yyyy for display
       function formatDate(date) {
@@ -92,20 +95,26 @@
           .padStart(2, "0")}/${d.getUTCFullYear()}`;
       }
 
+      function toISODate(dateBR) {
+        const [day, month, year] = dateBR.split("/");
+        return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+      }
+
       // Populate series dropdown
       async function loadSeries() {
         try {
           const response = await fetch("/api/v1/series");
-          const seriesList = await response.json();
+          seriesList = await response.json();
           if (!response.ok) throw new Error("Failed to fetch series");
 
           const select = document.getElementById("series-select");
           seriesList.forEach((series) => {
             const option = document.createElement("option");
-            option.value = series.key;
-            option.textContent = series.name;
+            option.value = series.key; // Value is series.key (e.g., "cdi", "holidays")
+            option.textContent = series.name; // Display is series.name
             if (series.key === currentSeries) option.selected = true;
             select.appendChild(option);
+            seriesSchemas[series.key] = series.schemaType;
           });
         } catch (error) {
           console.error("Error loading series:", error);
@@ -115,13 +124,32 @@
 
       // Change selected series
       function changeSeries(series) {
-        if (series) {
+        // alert(`Selected series key: ${series}`);
+        if (series && seriesList.some((s) => s.key === series)) {
           currentSeries = series;
-          document.getElementById('records-body').innerHTML = '';
-          document.getElementById('most-recent-date').textContent = 'N/A';
+          // alert(`Selected series: ${currentSeries}`);
+          currentSchemaType = seriesSchemas[series] || "date_value";
+          document.getElementById("records-body").innerHTML = "";
+          document.getElementById("most-recent-date").textContent = "N/A";
+          updateTableHeader();
           loadRecords();
           updateMostRecentDate();
         }
+      }
+
+      function updateTableHeader() {
+        const thead = document.getElementById("table-head");
+        thead.innerHTML = "";
+        const tr = document.createElement("tr");
+        if (currentSchemaType === "date_value") {
+          tr.innerHTML = "<th>Date</th><th>Value</th><th>Actions</th>";
+        } else if (currentSchemaType === "ohlc") {
+          tr.innerHTML =
+            "<th>Date</th><th>Open</th><th>High</th><th>Low</th><th>Close</th><th>Actions</th>";
+        } else if (currentSchemaType === "dateOnly") {
+          tr.innerHTML = "<th>Date</th><th>Actions</th>";
+        }
+        thead.appendChild(tr);
       }
 
       // Fetch and store BCB data
@@ -130,32 +158,76 @@
           alert("Please select a series first");
           return;
         }
+        try {
+          let url;
+          const series = seriesList.find((s) => s.key === currentSeries);
+          if (!series) throw new Error("Selected series not found");
 
-        const response = await fetch(`/api/v1/${currentSeries}/bcb-data`);
+          if (!series.sgsCode) {
+            url = `/api/v1/${currentSeries}/google-sheets`;
+          } else {
+            url = `/api/v1/${currentSeries}/bcb-data`;
+          }
 
-        if (!response.ok) {
-          alert("Error fetching data from BCB");
-          return;
+          const response = await fetch(url, {
+            method: "GET",
+            headers: url.startsWith("https") ? { "X-Custom-URL": url } : {},
+          });
+          const result = await response.json();
+
+          if (!response.ok) {
+            throw new Error(
+              result.error ||
+                `Failed to fetch ${currentSeries.toUpperCase()} data`
+            );
+          }
+
+          alert(result.message);
+          loadRecords();
+          updateMostRecentDate();
+        } catch (error) {
+          alert(
+            `Error fetching ${currentSeries.toUpperCase()} data: ${
+              error.message
+            }`
+          );
         }
-        const result = await response.json();
-        alert(result.message);
-        loadRecords();
-        updateMostRecentDate(); // Update most recent date after fetching new data
       }
+
+      //   const response = await fetch(`/api/v1/${currentSeries}/bcb-data`);
+
+      //   if (!response.ok) {
+      //     alert("Error fetching data from BCB");
+      //     return;
+      //   }
+      //   const result = await response.json();
+      //   alert(result.message);
+      //   loadRecords();
+      //   updateMostRecentDate(); // Update most recent date after fetching new data
+      // }
 
       // Load records from MongoDB with optional date filters
       async function loadRecords() {
         if (!currentSeries) return;
+        if (!seriesList.some((s) => s.key === currentSeries)) {
+          console.error("Invalid currentSeries:", currentSeries);
+          alert("Current series is not valid. Please select a valid series.");
+          return;
+        }
         try {
           const startDate = document.getElementById("start-date").value;
           const endDate = document.getElementById("end-date").value;
           let url = `/api/v1/${currentSeries}/records`;
+          // alert(
+          //   `Loading records for ${currentSeries.toUpperCase()} with filters: ${startDate} to ${endDate}`
+          // );
           const params = new URLSearchParams();
           if (startDate) params.append("startDate", startDate);
           if (endDate) params.append("endDate", endDate);
           if (params.toString()) url += `?${params.toString()}`;
 
           const response = await fetch(url);
+
           const records = await response.json();
 
           if (!response.ok) {
@@ -169,22 +241,56 @@
           tbody.innerHTML = "";
           records.forEach((record) => {
             const tr = document.createElement("tr");
-            tr.innerHTML = `
-                        <td><input type="text" value="${formatDate(
-                          record.date
-                        )}" id="date-${record._id}"></td>
-                        <td><input type="number" value="${
-                          record.value
-                        }" id="value-${record._id}" step="0.01"></td>
-                        <td>
-                            <button onclick="updateRecord('${
-                              record._id
-                            }')">Update</button>
-                            <button onclick="deleteRecord('${formatDate(
-                              record.date
-                            )}')">Delete</button>
-                        </td>
-                    `;
+            if (currentSchemaType === "date_value") {
+              tr.innerHTML = `
+                            <td>${formatDate(record.date)}</td>
+                            <td>${record.value}</td>
+                            <td>
+                                <button onclick="updateRecord('${
+                                  record._id
+                                }', '${formatDate(record.date)}', ${
+                record.value
+              })">Update</button>
+                                <button onclick="deleteRecord('${formatDate(
+                                  record.date
+                                )}')">Delete</button>
+                            </td>
+                        `;
+            } else if (currentSchemaType === "ohlc") {
+              tr.innerHTML = `
+                            <td>${formatDate(record.date)}</td>
+                            <td>${record.open}</td>
+                            <td>${record.high}</td>
+                            <td>${record.low}</td>
+                            <td>${record.close}</td>
+                            <td>
+                                <button onclick="updateComplexRecord('${
+                                  record._id
+                                }', '${formatDate(record.date)}', ${
+                record.open
+              }, ${record.high}, ${record.low}, ${
+                record.close
+              })">Update</button>
+                                <button onclick="deleteRecord('${formatDate(
+                                  record.date
+                                )}')">Delete</button>
+                            </td>
+                        `;
+            } else if (currentSchemaType === "dateOnly") {
+              tr.innerHTML = `
+                            <td>${formatDate(record.date)}</td>
+                            <td>
+                                <button onclick="updateDateOnly('${
+                                  record._id
+                                }', '${formatDate(
+                record.date
+              )}')">Update</button>
+                                <button onclick="deleteRecord('${formatDate(
+                                  record.date
+                                )}')">Delete</button>
+                            </td>
+                        `;
+            }
             tbody.appendChild(tr);
           });
         } catch (error) {
@@ -204,7 +310,7 @@
             `/api/v1/${currentSeries}/most-recent-date`
           );
           const result = await response.json();
-
+          // alert(`Most recent date: ${result.date}`);
           if (!response.ok) {
             throw new Error(
               result.error ||
@@ -224,32 +330,136 @@
       }
 
       // Update a record
-      async function updateRecord(id) {
-        const dateInput = document.getElementById(`date-${id}`).value;
-        const valueInput = document.getElementById(`value-${id}`).value;
-        const [day, month, year] = dateInput.split("/"); // Convert dd/mm/yyyy back to ISO
-        const isoDate = `${year}-${month}-${day}`;
-        alert(
-          `Updating record with ID: ${id}, Date: ${isoDate}, Value: ${valueInput}`
+      async function updateRecord(id, currentDate, currentValue) {
+        if (!currentSeries || currentSchemaType !== "date_value") return;
+        const date = prompt(
+          "Enter new date (yyyy-mm-dd):",
+          toISODate(currentDate)
         );
-        const response = await fetch(`/api/v1/${currentSeries}/records/${id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ date: isoDate, value: valueInput }),
-        });
-        const result = await response.json();
-        alert(result.message);
-        loadRecords();
-        updateMostRecentDate(); // Update most recent date after modification
+        const value = prompt("Enter new value:", currentValue);
+        if (date && value) {
+          try {
+            const response = await fetch(
+              `/api/v1/${currentSeries}/records/${id}`,
+              {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ date, value }),
+              }
+            );
+            const result = await response.json();
+
+            if (!response.ok) {
+              throw new Error(
+                result.error ||
+                  `Failed to update ${currentSeries.toUpperCase()} record`
+              );
+            }
+
+            alert(result.message);
+            loadRecords();
+          } catch (error) {
+            alert(
+              `Error updating ${currentSeries.toUpperCase()} record: ${
+                error.message
+              }`
+            );
+          }
+        }
+      }
+      // Update a complex record (OHLC)
+      async function updateComplexRecord(
+        id,
+        currentDate,
+        currentOpen,
+        currentHigh,
+        currentLow,
+        currentClose
+      ) {
+        if (!currentSeries || currentSchemaType !== "ohlc") return;
+        const date = prompt(
+          "Enter new date (yyyy-mm-dd):",
+          toISODate(currentDate)
+        );
+        const open = prompt("Enter new open value:", currentOpen);
+        const high = prompt("Enter new high value:", currentHigh);
+        const low = prompt("Enter new low value:", currentLow);
+        const close = prompt("Enter new close value:", currentClose);
+        if (date && open && high && low && close) {
+          try {
+            const response = await fetch(
+              `/api/v1/${currentSeries}/records/${id}`,
+              {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ date, open, high, low, close }),
+              }
+            );
+            const result = await response.json();
+
+            if (!response.ok) {
+              throw new Error(
+                result.error ||
+                  `Failed to update ${currentSeries.toUpperCase()} record`
+              );
+            }
+
+            alert(result.message);
+            loadRecords();
+          } catch (error) {
+            alert(
+              `Error updating ${currentSeries.toUpperCase()} record: ${
+                error.message
+              }`
+            );
+          }
+        }
+      }
+
+      async function updateDateOnly(id, currentDate) {
+        if (!currentSeries || currentSchemaType !== "dateOnly") return;
+        const date = prompt(
+          "Enter new date (yyyy-mm-dd):",
+          toISODate(currentDate)
+        );
+        if (date) {
+          try {
+            const response = await fetch(
+              `/api/v1/${currentSeries}/records/${id}`,
+              {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ date }),
+              }
+            );
+            const result = await response.json();
+
+            if (!response.ok) {
+              throw new Error(
+                result.error ||
+                  `Failed to update ${currentSeries.toUpperCase()} record`
+              );
+            }
+
+            alert(result.message);
+            loadRecords();
+          } catch (error) {
+            alert(
+              `Error updating ${currentSeries.toUpperCase()} record: ${
+                error.message
+              }`
+            );
+          }
+        }
       }
 
       // Delete a record
       async function deleteRecord(date) {
+        if (!currentSeries) return;
         if (
           confirm(`Are you sure you want to delete all records FROM ${date}?`)
         ) {
-          // const [day, month, year] = date.split('/'); // Convert dd/mm/yyyy to ISO
-          // const isoDate = `${year}-${month}-${day}`;
+          const isoDate = toISODate(date);
 
           const response = await fetch(
             `/api/v1/${currentSeries}/records/delete-from?date=${date}`,

@@ -1,4 +1,4 @@
-const createController = require('./genericController');
-const SelicModel = require('../models/selic');
+// const createController = require('./genericController');
+// const SelicModel = require('../models/selic');
 
-module.exports = createController(SelicModel, 'SELIC');
+// module.exports = createController(SelicModel, 'SELIC');

@@ -1,6 +1,6 @@
 const { treatBcbData } = require("../utils/treatBcbData");
 const bcbAPI_URL = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.";
-const BCB_SERIES = require("../config/dataseries-codes");
+const DATA_SERIES = require("../config/dataseries-codes");
 const {
   normalizeDates,
   formatDateBR,
@@ -9,11 +9,11 @@ const {
 
 // Factory function to create controllers for BCB date-value data
 const createBcbDateValueController = (Model, seriesKey) => {
-  const seriesConfig = BCB_SERIES[seriesKey];
+  const seriesConfig = DATA_SERIES[seriesKey];
   const sgsCode = seriesConfig?.sgsCode;
   const seriesStartDate = seriesConfig?.startDate;
-  console.log(seriesKey);
-  console.log("SGS Code:", sgsCode);
+  // console.log(seriesKey);
+  // console.log("SGS Code:", sgsCode);
 
   if (!sgsCode || !seriesStartDate) {
     throw new Error(`Invalid BCB series key or missing configuration: ${seriesKey}`);
@@ -79,6 +79,7 @@ const createBcbDateValueController = (Model, seriesKey) => {
           if (endDate) query.date.$lte = new Date(endDate);
         }
         const records = await Model.find(query).sort({ date: -1 });
+        console.log('getAllRecords:', records.length);
         res.json(records);
       } catch (error) {
         res.status(500).json({ error: "Failed to fetch records" });

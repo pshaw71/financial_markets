@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BCB Data Manager</title>
+    <style>
+      .container {
+        width: 80%;
+        margin: 20px auto;
+        text-align: center;
+      }
+      select,
+      button,
+      input {
+        margin: 5px;
+        padding: 5px 10px;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        margin-top: 20px;
+      }
+      th,
+      td {
+        border: 1px solid #ddd;
+        padding: 2px;
+        text-align: left;
+      }
+      th {
+        background-color: #f2f2f2;
+      }
+      .date-inputs {
+        margin-top: 5px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+      .date-inputs label {
+        margin-right: 5px;
+      }
+      .date-inputs div {
+        display: flex;
+        align-items: center;
+        margin: 2px 0;
+      }
+    </style>
+  </head>
+  <body>
+    <h1 style="text-align: center">BCB Data Manager</h1>
+    <div class="container">
+      <label for="series-select">Select Series: </label>
+      <select id="series-select" onchange="changeSeries(this.value)">
+        <option value="">Select a series</option>
+      </select>
+      <button onclick="fetchAndStoreData()">Fetch Data</button>
+      <p>Most Recent Date: <span id="most-recent-date">N/A</span></p>
+      <hr />
+      <div class="date-inputs">
+        <div>
+          <label for="start-date">Start Date (dd/mm/yyyy): </label>
+          <input type="date" id="start-date" />
+        </div>
+        <div>
+          <label for="end-date">End Date (dd/mm/yyyy): </label>
+          <input type="date" id="end-date" />
+        </div>
+        <button onclick="loadRecords()">Load Records with Filters</button>
+      </div>
+    </div>
+    <table id="records-table">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Value</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="records-body"></tbody>
+    </table>
+
+    <script>
+      let currentSeries = "cdi"; // Default series
+
+      // Helper to format Date to dd/mm/yyyy for display
+      function formatDate(date) {
+        const d = new Date(date);
+        return `${d.getUTCDate().toString().padStart(2, "0")}/${(
+          d.getUTCMonth() + 1
+        )
+          .toString()
+          .padStart(2, "0")}/${d.getUTCFullYear()}`;
+      }
+
+      // Populate series dropdown
+      async function loadSeries() {
+        try {
+          const response = await fetch("/api/v1/series");
+          const seriesList = await response.json();
+          if (!response.ok) throw new Error("Failed to fetch series");
+
+          const select = document.getElementById("series-select");
+          seriesList.forEach((series) => {
+            const option = document.createElement("option");
+            option.value = series.key;
+            option.textContent = series.name;
+            if (series.key === currentSeries) option.selected = true;
+            select.appendChild(option);
+          });
+        } catch (error) {
+          console.error("Error loading series:", error);
+          alert("Failed to load series: " + error.message);
+        }
+      }
+
+      // Change selected series
+      function changeSeries(series) {
+        if (series) {
+          currentSeries = series;
+          document.getElementById('records-body').innerHTML = '';
+          document.getElementById('most-recent-date').textContent = 'N/A';
+          loadRecords();
+          updateMostRecentDate();
+        }
+      }
+
+      // Fetch and store BCB data
+      async function fetchAndStoreData() {
+        if (!currentSeries) {
+          alert("Please select a series first");
+          return;
+        }
+
+        const response = await fetch(`/api/v1/${currentSeries}/bcb-data`);
+
+        if (!response.ok) {
+          alert("Error fetching data from BCB");
+          return;
+        }
+        const result = await response.json();
+        alert(result.message);
+        loadRecords();
+        updateMostRecentDate(); // Update most recent date after fetching new data
+      }
+
+      // Load records from MongoDB with optional date filters
+      async function loadRecords() {
+        if (!currentSeries) return;
+        try {
+          const startDate = document.getElementById("start-date").value;
+          const endDate = document.getElementById("end-date").value;
+          let url = `/api/v1/${currentSeries}/records`;
+          const params = new URLSearchParams();
+          if (startDate) params.append("startDate", startDate);
+          if (endDate) params.append("endDate", endDate);
+          if (params.toString()) url += `?${params.toString()}`;
+
+          const response = await fetch(url);
+          const records = await response.json();
+
+          if (!response.ok) {
+            throw new Error(
+              records.error ||
+                `Failed to load ${currentSeries.toUpperCase()} records`
+            );
+          }
+
+          const tbody = document.getElementById("records-body");
+          tbody.innerHTML = "";
+          records.forEach((record) => {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+                        <td><input type="text" value="${formatDate(
+                          record.date
+                        )}" id="date-${record._id}"></td>
+                        <td><input type="number" value="${
+                          record.value
+                        }" id="value-${record._id}" step="0.01"></td>
+                        <td>
+                            <button onclick="updateRecord('${
+                              record._id
+                            }')">Update</button>
+                            <button onclick="deleteRecord('${formatDate(
+                              record.date
+                            )}')">Delete</button>
+                        </td>
+                    `;
+            tbody.appendChild(tr);
+          });
+        } catch (error) {
+          alert(
+            `Error loading ${currentSeries.toUpperCase()} records: ${
+              error.message
+            }`
+          );
+        }
+      }
+
+      // Update the most recent date display
+      async function updateMostRecentDate() {
+        if (!currentSeries) return;
+        try {
+          const response = await fetch(
+            `/api/v1/${currentSeries}/most-recent-date`
+          );
+          const result = await response.json();
+
+          if (!response.ok) {
+            throw new Error(
+              result.error ||
+                `Failed to fetch most recent ${currentSeries.toUpperCase()} date`
+            );
+          }
+
+          const dateSpan = document.getElementById("most-recent-date");
+          dateSpan.textContent = result.date ? result.dateBR : "N/A";
+        } catch (error) {
+          console.error(
+            `Error updating most recent ${currentSeries.toUpperCase()} date:`,
+            error
+          );
+          document.getElementById("most-recent-date").textContent = "Error";
+        }
+      }
+
+      // Update a record
+      async function updateRecord(id) {
+        const dateInput = document.getElementById(`date-${id}`).value;
+        const valueInput = document.getElementById(`value-${id}`).value;
+        const [day, month, year] = dateInput.split("/"); // Convert dd/mm/yyyy back to ISO
+        const isoDate = `${year}-${month}-${day}`;
+        alert(
+          `Updating record with ID: ${id}, Date: ${isoDate}, Value: ${valueInput}`
+        );
+        const response = await fetch(`/api/v1/${currentSeries}/records/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ date: isoDate, value: valueInput }),
+        });
+        const result = await response.json();
+        alert(result.message);
+        loadRecords();
+        updateMostRecentDate(); // Update most recent date after modification
+      }
+
+      // Delete a record
+      async function deleteRecord(date) {
+        if (
+          confirm(`Are you sure you want to delete all records FROM ${date}?`)
+        ) {
+          // const [day, month, year] = date.split('/'); // Convert dd/mm/yyyy to ISO
+          // const isoDate = `${year}-${month}-${day}`;
+
+          const response = await fetch(
+            `/api/v1/${currentSeries}/records/delete-from?date=${date}`,
+            {
+              method: "DELETE",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ date: isoDate }),
+            }
+          );
+
+          const result = await response.json();
+          alert(result.message);
+          loadRecords();
+          updateMostRecentDate(); // Update most recent date after deletion
+        }
+      }
+
+      // Load records and most recent date on page load
+      window.onload = () => {
+        loadSeries().then(() => {
+          loadRecords();
+          updateMostRecentDate();
+        });
+      };
+    </script>
+  </body>
+</html>
