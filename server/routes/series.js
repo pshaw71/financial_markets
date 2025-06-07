@@ -11,11 +11,13 @@ router.get('/series', (req, res) => {
     startDate: DATA_SERIES[key].startDate,
     schemaType: DATA_SERIES[key].schemaType
   }));
+
   const googleSeriesList = Object.keys(GOOGLE_SERIES).map(key => ({
     key: key.toLowerCase(),
     name: GOOGLE_SERIES[key].name,
     schemaType: GOOGLE_SERIES[key].schemaType
   }));
+  
   const seriesList = [...bcbSeriesList, ...googleSeriesList];
   console.log('seriesList', seriesList);
   res.json(seriesList);
