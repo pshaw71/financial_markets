@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const DATA_SERIES = require('../config/dataseries-codes');
 const GOOGLE_SERIES = require('../config/googleSeries');
+const B3_SERIES = require('../config/b3Series');
 
 router.get('/series', (req, res) => {
   const bcbSeriesList = Object.keys(DATA_SERIES).map(key => ({
@@ -17,8 +18,15 @@ router.get('/series', (req, res) => {
     name: GOOGLE_SERIES[key].name,
     schemaType: GOOGLE_SERIES[key].schemaType
   }));
-  
-  const seriesList = [...bcbSeriesList, ...googleSeriesList];
+
+  const b3SeriesList = Object.keys(B3_SERIES).map(key => ({
+    key: key.toLowerCase(),
+    name: B3_SERIES[key].name,
+    schemaType: B3_SERIES[key].schemaType
+  }));
+
+  // Combine all series lists into one
+  const seriesList = [...bcbSeriesList, ...googleSeriesList, ...b3SeriesList];
   console.log('seriesList', seriesList);
   res.json(seriesList);
 });

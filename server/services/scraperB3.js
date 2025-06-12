@@ -3,9 +3,14 @@
 const { treatedB3Data } = require('../utils/datesB3'); // Importing the function to treat B3 data
 const pkg = require('selenium-webdriver'); // Importing the selenium-webdriver package
 const { Builder, By, until, Select } = pkg; 
+const {
+  normalizeDates,
+  formatDateBR,
+  formatBRDate,
+} = require("../utils/normalizeDates");
 
 //----------------------------------------------------------------
-export async function scrapeDI1DataFromB3(date) {
+async function scrapeDI1DataFromB3(date) {
   console.log('FetchDate1: ' + date);
   // let aggregatedData = null;
 
@@ -13,7 +18,7 @@ export async function scrapeDI1DataFromB3(date) {
   const driver = await new Builder().forBrowser('chrome').build();
 
   // Set timeout for each loading page
-  const timeout = 3000; // 3.0 secs
+  const timeout = 1000; // 1.0 secs
 
   try {
     // Go to the URL
@@ -44,7 +49,7 @@ export async function scrapeDI1DataFromB3(date) {
     console.log('currentDate: ', currentDate);
 
     function formatDate(date) {
-      console.log(date);
+      console.log('formatDate: ', date);
       const monthNames = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
       //const monthNames1 = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
       const monthNames1 = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
@@ -63,7 +68,7 @@ export async function scrapeDI1DataFromB3(date) {
     }
 
     // Execute JavaScript to change the value, *and* trigger a change event
-    const formattedDate = formatDate(new Date(date));
+    const formattedDate = formatDate(formatBRDate(date));
     console.log('test: ', formattedDate.dateB3.toString(), currentDate.toString());
 
     let dateAvailable = false;
@@ -160,7 +165,7 @@ export async function scrapeDI1DataFromB3(date) {
     };
 
     const adjustedData =  convertToNumbers(allData);
-    console.log('adjustedData:', adjustedData);
+    console.log('adjustedData:', adjustedData[0]);
     return adjustedData;
 
   } catch (error) {
@@ -174,21 +179,32 @@ export async function scrapeDI1DataFromB3(date) {
 }
 
 //----------------------------------------------------------------
-export async function fetchB3TreatedData(date) {
+const fetchB3TreatedData = async (date, holidays) => {
   if (!date) {
     console.log('Date not informed!!!');
     return
   }
-  const holidays = req.app.locals.holidays;
+  
+  // Ensure holidays is provided and is an array
+  if (!holidays || !Array.isArray(holidays)) {
+    console.error('Error: Holidays array not provided or invalid.');
+    return null; // Handle cases where holidays might be missing
+  }
+
   const rawData = await scrapeDI1DataFromB3(date);
-  console.log('FetchedData: ', rawData);
+  console.log('FetchedData: ', rawData[0]);
   if (rawData) {
     const treatedData = treatedB3Data(date, rawData, holidays);
+    console.log('treatedData: ', treatedData[0]);
     return treatedData;
   } else {
-    const treatedData = undefined;
+    console.log('No raw data was scraped from B3.');
+    return undefined;
   }
 
 }
 
-// console.log(scrapeDI1DataFromB3('2025-06-03'));
+module.exports = {
+  scrapeDI1DataFromB3,
+  fetchB3TreatedData
+};

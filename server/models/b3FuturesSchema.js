@@ -1,12 +1,12 @@
 const mongoose = require('mongoose');
 
 const contractSchema = new mongoose.Schema({
-  expiryCode: {
-    type: String,
-    required: true,
-  },
   expiryDate: {
     type: Date,
+    required: true,
+  },
+  expiryCode: {
+    type: String,
     required: true,
   },
   outstandingContracts: {
@@ -33,7 +33,7 @@ const contractSchema = new mongoose.Schema({
     type: Number,
     required: true,
   },
-  miniumumPrice: {
+  minimumPrice: {
     type: Number,
     required: true,
   },
@@ -76,9 +76,9 @@ const b3FuturesSchema = new mongoose.Schema({
   contracts: [contractSchema],
 });
 
-b3FuturesSchema.pre('save', function(next) {
-  this.date.setHours(0, 0, 0, 0); // Sets time to midnight
-  next();
-});
+// b3FuturesSchema.pre('save', function(next) {
+//   this.date.setHours(0, 0, 0, 0); // Sets time to midnight
+//   next();
+// });
 
 module.exports = b3FuturesSchema;

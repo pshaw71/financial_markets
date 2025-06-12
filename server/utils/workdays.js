@@ -12,16 +12,25 @@ const getHolidaysFromDB = async () => {
 };
 
 function workDay(startDate, workdays, holidays) {
-  let endDate = startDate;
+  let date = new Date(startDate); // create a copy to avoid mutating original
+  console.log('workDay-startDate:', startDate, date);
+  // If workdays is 0, adjust startDate if it falls on weekend or holiday
+  if (workdays === 0) {
+    while (isWeekend(date) || isHoliday(date, holidays)) {
+      date.setDate(date.getDate() + 1);
+    }
+    return date;
+  }
 
+  // For positive workdays
   while (workdays > 0) {
-    endDate.setDate(endDate.getDate() + 1);
-    if (!isWeekend(endDate) && !isHoliday(endDate, holidays)) {
+    date.setDate(date.getDate() + 1);
+    if (!isWeekend(date) && !isHoliday(date, holidays)) {
       workdays--;
     }
   }
 
-  return endDate;
+  return date;
 }
 
 function isWeekend(date) {
@@ -33,6 +42,18 @@ function isHoliday(date, holidays) {
   return holidays.some(holiday => holiday.getTime() === date.getTime());
 }
 
+function toUTC(date) {
+  const utcDate = new Date(Date.UTC(
+    date.getUTCFullYear(),
+    date.getUTCMonth(),
+    date.getUTCDate()
+  ));
+  
+  return utcDate;
+}
 
+function toExcelDate(date) {
+  return 25569 + Math.floor(((date.getTime() - (date.getTimezoneOffset() * 60 * 1000)) / (1000 * 60 * 60 * 24)));
+}
 
-module.exports = { getHolidaysFromDB, workDay, isWeekend, isHoliday };
+module.exports = { getHolidaysFromDB, workDay, isWeekend, isHoliday, toUTC, toExcelDate };
